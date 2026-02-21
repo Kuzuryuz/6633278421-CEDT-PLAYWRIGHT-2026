@@ -1,76 +1,84 @@
-import { test, expect } from '@playwright/test'
+import { test as base, expect } from '@playwright/test'
+import { Login } from '../pages/login'
 
-const BASE_URL = 'https://katalon-demo-cura.herokuapp.com/'
-const VALID_USERNAME = 'John Doe'
-const VALID_PASSWORD = 'ThisIsNotAPassword'
+import user from '../test-data/user.json'
+import facilities from '../test-data/facilities.json'
+import programs from '../test-data/programs.json'
+import comment from '../test-data/comment.json'
+
+type User = {
+	username: string
+	password: string
+}
+
+const test = base.extend<{ loginUser: User }>({
+	loginUser: async ({}, use) => {
+		await use(user as User)
+	},
+})
+
+const today = () => new Date().toLocaleDateString('en-US')
 
 test.describe('Assignment 2 - Assertion (CURA Make Appointment)', () => {
-	test('Verify assertions on Make Appointment page', async ({ page }) => {
-		// ========== Arrange ==========
-		await page.goto(BASE_URL)
-		await page.getByRole('link', { name: /make appointment/i }).click()
-
-		await expect(page).toHaveURL(/profile\.php#login/i)
-		await page.getByLabel('Username').fill(VALID_USERNAME)
-		await page.getByLabel('Password').fill(VALID_PASSWORD)
-		await page.getByRole('button', { name: 'Login' }).click()
-
+	test.beforeEach(async ({ page, loginUser }) => {
+		const login = new Login(page)
+		await login.open()
+		await login.submit(loginUser)
 		await expect(page).toHaveURL(/#appointment/i)
+	})
 
-		// 1) Verify h2 shows "Make Appointment"
-		await expect(page.locator('h2')).toHaveText(/make appointment/i)
+	test('Make appointment page displays "Make Appointment" in h2', async ({
+		page,
+	}) => {
+		await expect(page.getByRole('heading', { level: 2 })).toHaveText(
+			/Make Appointment/i
+		)
+	})
 
-		// 2) Verify can select all facility combo boxes (dropdown)
-		const facility = page.getByLabel('Facility')
-		await expect(facility).toBeVisible()
-		await facility.selectOption('Tokyo CURA Healthcare Center')
-		await expect(facility).toHaveValue('Tokyo CURA Healthcare Center')
+	test('Can select all facility combo boxes', async ({ page }) => {
+		const dropdown = page.getByLabel('Facility')
 
-		await facility.selectOption('Hongkong CURA Healthcare Center')
-		await expect(facility).toHaveValue('Hongkong CURA Healthcare Center')
+		for (const item of facilities) {
+			await dropdown.selectOption(item)
+			await expect(dropdown).toHaveValue(item)
+		}
+	})
 
-		await facility.selectOption('Seoul CURA Healthcare Center')
-		await expect(facility).toHaveValue('Seoul CURA Healthcare Center')
+	test('Can select apply for hospital readmission checkbox', async ({
+		page,
+	}) => {
+		const checkbox = page.getByLabel(/readmission/i)
+		await checkbox.check()
+		await expect(checkbox).toBeChecked()
+	})
 
-		// 3) Verify can select apply for hospital readmission checkbox
-		const readmission = page.getByLabel('Apply for hospital readmission')
-		await expect(readmission).toBeVisible()
-		await readmission.check()
-		await expect(readmission).toBeChecked()
+	test('Can select health care program radio button', async ({ page }) => {
+		for (const program of programs) {
+			const radio = page.getByLabel(program)
+			await radio.check()
+			await expect(radio).toBeChecked()
+		}
+	})
 
-		// 4) Verify can select health care program radio button
-		const programMedicare = page.getByLabel('Medicare')
-		const programMedicaid = page.getByLabel('Medicaid')
-		const programNone = page.getByLabel('None')
+	test('Can input current date on Visit Date', async ({ page }) => {
+		const dateInput = page.getByLabel(/visit date/i)
+		const current = today()
 
-		await programMedicare.check()
-		await expect(programMedicare).toBeChecked()
+		await dateInput.fill(current)
+		await expect(dateInput).toHaveValue(current)
+	})
 
-		await programMedicaid.check()
-		await expect(programMedicaid).toBeChecked()
+	test('Can input comment', async ({ page }) => {
+		const commentBox = page.getByLabel('Comment')
 
-		await programNone.check()
-		await expect(programNone).toBeChecked()
+		await commentBox.fill(comment.text)
+		await expect(commentBox).toHaveValue(comment.text)
+	})
 
-		// 5) Verify can input current date on Visit Date
-		const visitDate = page.getByLabel('Visit Date (Required)')
-		const today = new Date()
-		const dd = String(today.getDate()).padStart(2, '0')
-		const mm = String(today.getMonth() + 1).padStart(2, '0')
-		const yyyy = String(today.getFullYear())
-		const todayText = `${dd}/${mm}/${yyyy}`
+	test('Book appointment button is displayed and enabled', async ({ page }) => {
+		const button = page.getByRole('button', { name: /book/i })
 
-		await visitDate.fill(todayText)
-		await expect(visitDate).toHaveValue(todayText)
-
-		// 6) Verify can input comment
-		const comment = page.getByLabel('Comment')
-		await comment.fill('Automated test comment')
-		await expect(comment).toHaveValue('Automated test comment')
-
-		// 7) Verify book appointment button is displayed and enabled
-		const bookBtn = page.getByRole('button', { name: /Book Appointment/i })
-		await expect(bookBtn).toBeVisible()
-		await expect(bookBtn).toBeEnabled()
+		await expect(button).toBeVisible()
+		await expect(button).toBeEnabled()
 	})
 })
